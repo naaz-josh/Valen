@@ -35,74 +35,53 @@ function App() {
     "I'm not giving up!"
   ]
 
-  // Calculate safe positions that will always be within viewport (since button is position: fixed)
+  // Calculate safe positions using percentage-based approach for reliability
   const getSafePositions = (buttonWidth: number, buttonHeight: number) => {
-    // Since button uses position: fixed, use viewport coordinates
-    const margin = 80
-    const minX = margin
-    const minY = margin
-    // Ensure button fits completely - account for button width/height
-    const maxX = window.innerWidth - buttonWidth - margin
-    const maxY = window.innerHeight - buttonHeight - margin
-    
-    // Validate bounds
-    if (maxX <= minX || maxY <= minY || maxX < minX || maxY < minY) {
-      // Fallback to center
-      const centerX = Math.max(0, Math.min(window.innerWidth - buttonWidth, window.innerWidth / 2 - buttonWidth / 2))
-      const centerY = Math.max(0, Math.min(window.innerHeight - buttonHeight, window.innerHeight / 2 - buttonHeight / 2))
-      return [{
-        x: centerX,
-        y: centerY,
-        messageIndex: 0
-      }]
-    }
-    
-    // Calculate safe area
-    const safeWidth = maxX - minX
-    const safeHeight = maxY - minY
-    
-    // Create predefined safe positions - all using viewport coordinates
+    // Use percentage-based positions that are guaranteed to work
+    // These percentages ensure button stays well within viewport
     const positions = [
-      // Top row
-      { x: minX, y: minY, messageIndex: 0 }, // Top-left
-      { x: minX + safeWidth / 2, y: minY, messageIndex: 1 }, // Top-center
-      { x: maxX, y: minY, messageIndex: 2 }, // Top-right
+      // Top row - using 10% and 90% to stay well away from edges
+      { xPercent: 0.10, yPercent: 0.10, messageIndex: 0 }, // Top-left
+      { xPercent: 0.50, yPercent: 0.10, messageIndex: 1 }, // Top-center
+      { xPercent: 0.90, yPercent: 0.10, messageIndex: 2 }, // Top-right
       
       // Middle row
-      { x: minX, y: minY + safeHeight / 2, messageIndex: 3 }, // Middle-left
-      { x: minX + safeWidth / 2, y: minY + safeHeight / 2, messageIndex: 4 }, // Center
-      { x: maxX, y: minY + safeHeight / 2, messageIndex: 5 }, // Middle-right
+      { xPercent: 0.10, yPercent: 0.50, messageIndex: 3 }, // Middle-left
+      { xPercent: 0.50, yPercent: 0.50, messageIndex: 4 }, // Center
+      { xPercent: 0.90, yPercent: 0.50, messageIndex: 5 }, // Middle-right
       
       // Bottom row
-      { x: minX, y: maxY, messageIndex: 6 }, // Bottom-left
-      { x: minX + safeWidth / 2, y: maxY, messageIndex: 7 }, // Bottom-center
-      { x: maxX, y: maxY, messageIndex: 8 }, // Bottom-right
+      { xPercent: 0.10, yPercent: 0.90, messageIndex: 6 }, // Bottom-left
+      { xPercent: 0.50, yPercent: 0.90, messageIndex: 7 }, // Bottom-center
+      { xPercent: 0.90, yPercent: 0.90, messageIndex: 8 }, // Bottom-right
       
       // Additional positions
-      { x: minX + safeWidth * 0.25, y: minY + safeHeight * 0.25, messageIndex: 9 },
-      { x: minX + safeWidth * 0.75, y: minY + safeHeight * 0.25, messageIndex: 10 },
-      { x: minX + safeWidth * 0.25, y: minY + safeHeight * 0.75, messageIndex: 11 },
-      { x: minX + safeWidth * 0.75, y: minY + safeHeight * 0.75, messageIndex: 12 },
+      { xPercent: 0.25, yPercent: 0.25, messageIndex: 9 },
+      { xPercent: 0.75, yPercent: 0.25, messageIndex: 10 },
+      { xPercent: 0.25, yPercent: 0.75, messageIndex: 11 },
+      { xPercent: 0.75, yPercent: 0.75, messageIndex: 12 },
     ]
     
-    // Final validation - ensure button never goes outside viewport
+    // Convert percentages to pixel positions, accounting for button size
     return positions.map(pos => {
-      let x = pos.x
-      let y = pos.y
+      // Calculate position from percentage, then subtract half button size to center it
+      let x = (window.innerWidth * pos.xPercent) - (buttonWidth / 2)
+      let y = (window.innerHeight * pos.yPercent) - (buttonHeight / 2)
       
-      // Clamp to viewport bounds
-      x = Math.max(0, Math.min(window.innerWidth - buttonWidth, x))
-      y = Math.max(0, Math.min(window.innerHeight - buttonHeight, y))
+      // Ensure button fits completely within viewport
+      const margin = 20
+      x = Math.max(margin, Math.min(window.innerWidth - buttonWidth - margin, x))
+      y = Math.max(margin, Math.min(window.innerHeight - buttonHeight - margin, y))
       
-      // Double-check button fits
-      if (x + buttonWidth > window.innerWidth) {
+      // Final validation
+      if (x + buttonWidth > window.innerWidth - margin) {
         x = window.innerWidth - buttonWidth - margin
       }
-      if (y + buttonHeight > window.innerHeight) {
+      if (y + buttonHeight > window.innerHeight - margin) {
         y = window.innerHeight - buttonHeight - margin
       }
-      if (x < 0) x = margin
-      if (y < 0) y = margin
+      if (x < margin) x = margin
+      if (y < margin) y = margin
       
       return {
         x: Math.max(0, Math.min(window.innerWidth - buttonWidth, x)),
@@ -135,19 +114,44 @@ function App() {
   const moveNoButtonAway = (e: React.MouseEvent<HTMLButtonElement>) => {
     const button = e.currentTarget
     
-    // Get button dimensions - use offsetWidth/offsetHeight for more accurate size
-    // or getBoundingClientRect, whichever is more reliable
-    const buttonWidth = Math.max(
-      button.offsetWidth || button.getBoundingClientRect().width || 120,
-      120
+    // Get computed styles to account for all CSS properties
+    const computedStyle = window.getComputedStyle(button)
+    const rect = button.getBoundingClientRect()
+    
+    // Get dimensions - offsetWidth/Height includes padding and border
+    const offsetWidth = button.offsetWidth || 0
+    const offsetHeight = button.offsetHeight || 0
+    
+    // Also get from getBoundingClientRect (includes transforms if any)
+    const rectWidth = rect.width || 0
+    const rectHeight = rect.height || 0
+    
+    // Get padding and border from computed styles
+    const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0
+    const paddingRight = parseFloat(computedStyle.paddingRight) || 0
+    const paddingTop = parseFloat(computedStyle.paddingTop) || 0
+    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0
+    const borderLeft = parseFloat(computedStyle.borderLeftWidth) || 0
+    const borderRight = parseFloat(computedStyle.borderRightWidth) || 0
+    const borderTop = parseFloat(computedStyle.borderTopWidth) || 0
+    const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0
+    
+    // Calculate total dimensions including all spacing
+    const totalWidth = Math.max(
+      offsetWidth,
+      rectWidth,
+      offsetWidth + paddingLeft + paddingRight + borderLeft + borderRight,
+      150 // Minimum safe width
     )
-    const buttonHeight = Math.max(
-      button.offsetHeight || button.getBoundingClientRect().height || 50,
-      50
+    const totalHeight = Math.max(
+      offsetHeight,
+      rectHeight,
+      offsetHeight + paddingTop + paddingBottom + borderTop + borderBottom,
+      60 // Minimum safe height
     )
     
     // Get safe positions (game-like pattern)
-    const safePositions = getSafePositions(buttonWidth, buttonHeight)
+    const safePositions = getSafePositions(totalWidth, totalHeight)
     
     if (safePositions.length === 0) {
       // Fallback if no safe positions
@@ -160,9 +164,24 @@ function App() {
     // Move to next position for next click
     positionIndexRef.current = (positionIndexRef.current + 1) % safePositions.length
     
-    // Final validation before setting position
-    const finalX = Math.max(0, Math.min(window.innerWidth - buttonWidth, currentPosition.x))
-    const finalY = Math.max(0, Math.min(window.innerHeight - buttonHeight, currentPosition.y))
+    // Final validation before setting position - triple check
+    let finalX = currentPosition.x
+    let finalY = currentPosition.y
+    
+    // Ensure within viewport with extra safety margin
+    const safetyMargin = 10
+    finalX = Math.max(safetyMargin, Math.min(window.innerWidth - totalWidth - safetyMargin, finalX))
+    finalY = Math.max(safetyMargin, Math.min(window.innerHeight - totalHeight - safetyMargin, finalY))
+    
+    // Verify button fits completely - one more check
+    if (finalX + totalWidth > window.innerWidth - safetyMargin) {
+      finalX = Math.max(safetyMargin, window.innerWidth - totalWidth - safetyMargin)
+    }
+    if (finalY + totalHeight > window.innerHeight - safetyMargin) {
+      finalY = Math.max(safetyMargin, window.innerHeight - totalHeight - safetyMargin)
+    }
+    if (finalX < safetyMargin) finalX = safetyMargin
+    if (finalY < safetyMargin) finalY = safetyMargin
     
     // Set position and corresponding message
     setNoPosition({ x: finalX, y: finalY })
