@@ -12,10 +12,30 @@ function App() {
   const [rotatingGifts, setRotatingGifts] = useState<{[key: string]: boolean}>({})
   const [showSapneDekh, setShowSapneDekh] = useState<{[key: string]: boolean}>({})
   const noButtonRef = useRef<HTMLButtonElement>(null)
+  const appContainerRef = useRef<HTMLDivElement>(null)
   const hasMovedRef = useRef(false) // Track if button has moved in current hover
-  const lastMoveTimeRef = useRef(0) // Track last move time to prevent rapid triggers
   const giftTimersRef = useRef<{[key: string]: number}>({})
-  const positionIndexRef = useRef(0) // Track current position in cycle
+
+  // Get actual viewport dimensions - full screen like normal laptop
+  const getViewportDimensions = () => {
+    // Use app container dimensions if available
+    if (appContainerRef.current) {
+      const rect = appContainerRef.current.getBoundingClientRect()
+      return { 
+        width: Math.max(rect.width, 320), 
+        height: Math.max(rect.height, 240) 
+      }
+    }
+    
+    // Use full window dimensions for normal laptop screen
+    const width = window.innerWidth || document.documentElement.clientWidth || 0
+    const height = window.innerHeight || document.documentElement.clientHeight || 0
+    
+    return { 
+      width: Math.max(width, 320), 
+      height: Math.max(height, 240) 
+    }
+  }
 
   const funnyMessages = [
     "Are you sure?",
@@ -35,157 +55,60 @@ function App() {
     "I'm not giving up!"
   ]
 
-  // Calculate safe positions using percentage-based approach for reliability
-  const getSafePositions = (buttonWidth: number, buttonHeight: number) => {
-    // Use percentage-based positions that are guaranteed to work
-    // These percentages ensure button stays well within viewport
-    const positions = [
-      // Top row - using 10% and 90% to stay well away from edges
-      { xPercent: 0.10, yPercent: 0.10, messageIndex: 0 }, // Top-left
-      { xPercent: 0.50, yPercent: 0.10, messageIndex: 1 }, // Top-center
-      { xPercent: 0.90, yPercent: 0.10, messageIndex: 2 }, // Top-right
-      
-      // Middle row
-      { xPercent: 0.10, yPercent: 0.50, messageIndex: 3 }, // Middle-left
-      { xPercent: 0.50, yPercent: 0.50, messageIndex: 4 }, // Center
-      { xPercent: 0.90, yPercent: 0.50, messageIndex: 5 }, // Middle-right
-      
-      // Bottom row
-      { xPercent: 0.10, yPercent: 0.90, messageIndex: 6 }, // Bottom-left
-      { xPercent: 0.50, yPercent: 0.90, messageIndex: 7 }, // Bottom-center
-      { xPercent: 0.90, yPercent: 0.90, messageIndex: 8 }, // Bottom-right
-      
-      // Additional positions
-      { xPercent: 0.25, yPercent: 0.25, messageIndex: 9 },
-      { xPercent: 0.75, yPercent: 0.25, messageIndex: 10 },
-      { xPercent: 0.25, yPercent: 0.75, messageIndex: 11 },
-      { xPercent: 0.75, yPercent: 0.75, messageIndex: 12 },
-    ]
+  // Simple function to get safe random position within viewport
+  const getSafeRandomPosition = () => {
+    const viewport = getViewportDimensions()
+    // Large margins and button size estimates to ensure button stays well inside
+    const margin = 200 // Large margin from edges
+    const buttonWidth = 250 // Generous estimate
+    const buttonHeight = 100 // Generous estimate
     
-    // Convert percentages to pixel positions, accounting for button size
-    return positions.map(pos => {
-      // Calculate position from percentage, then subtract half button size to center it
-      let x = (window.innerWidth * pos.xPercent) - (buttonWidth / 2)
-      let y = (window.innerHeight * pos.yPercent) - (buttonHeight / 2)
-      
-      // Ensure button fits completely within viewport
-      const margin = 20
-      x = Math.max(margin, Math.min(window.innerWidth - buttonWidth - margin, x))
-      y = Math.max(margin, Math.min(window.innerHeight - buttonHeight - margin, y))
-      
-      // Final validation
-      if (x + buttonWidth > window.innerWidth - margin) {
-        x = window.innerWidth - buttonWidth - margin
-      }
-      if (y + buttonHeight > window.innerHeight - margin) {
-        y = window.innerHeight - buttonHeight - margin
-      }
-      if (x < margin) x = margin
-      if (y < margin) y = margin
-      
+    // Calculate safe area - ensure it's well within viewport
+    const safeWidth = viewport.width - (margin * 2) - buttonWidth
+    const safeHeight = viewport.height - (margin * 2) - buttonHeight
+    
+    // Ensure we have valid bounds
+    if (safeWidth <= 0 || safeHeight <= 0) {
+      // Fallback to center if viewport is too small
       return {
-        x: Math.max(0, Math.min(window.innerWidth - buttonWidth, x)),
-        y: Math.max(0, Math.min(window.innerHeight - buttonHeight, y)),
-        messageIndex: pos.messageIndex % funnyMessages.length
+        x: Math.max(margin, (viewport.width - buttonWidth) / 2),
+        y: Math.max(margin, (viewport.height - buttonHeight) / 2),
+        messageIndex: Math.floor(Math.random() * funnyMessages.length)
       }
-    })
+    }
+    
+    // Generate random position well within safe bounds
+    const x = margin + Math.random() * safeWidth
+    const y = margin + Math.random() * safeHeight
+    
+    return {
+      x: Math.max(margin, Math.min(viewport.width - buttonWidth - margin, x)),
+      y: Math.max(margin, Math.min(viewport.height - buttonHeight - margin, y)),
+      messageIndex: Math.floor(Math.random() * funnyMessages.length)
+    }
   }
 
   const handleNoClickAttempt = (e: React.MouseEvent<HTMLButtonElement>) => {
-    // Only move on actual click attempt - prevent if already moved
     e.preventDefault()
     e.stopPropagation()
-    const now = Date.now()
-    if (!hasMovedRef.current && (now - lastMoveTimeRef.current > 500)) {
-      lastMoveTimeRef.current = now
-      moveNoButtonAway(e)
+    if (!hasMovedRef.current) {
+      moveNoButtonAway()
     }
   }
 
-  const handleNoHover = (e: React.MouseEvent<HTMLButtonElement>) => {
-    // Only move on first hover attempt - prevent rapid triggers
-    const now = Date.now()
-    if (!hasMovedRef.current && (now - lastMoveTimeRef.current > 500)) {
-      lastMoveTimeRef.current = now
-      moveNoButtonAway(e)
+  const handleNoHover = () => {
+    if (!hasMovedRef.current) {
+      moveNoButtonAway()
     }
   }
 
-  const moveNoButtonAway = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const button = e.currentTarget
+  const moveNoButtonAway = () => {
+    // Get safe random position - simple and reliable
+    const safePos = getSafeRandomPosition()
     
-    // Get computed styles to account for all CSS properties
-    const computedStyle = window.getComputedStyle(button)
-    const rect = button.getBoundingClientRect()
-    
-    // Get dimensions - offsetWidth/Height includes padding and border
-    const offsetWidth = button.offsetWidth || 0
-    const offsetHeight = button.offsetHeight || 0
-    
-    // Also get from getBoundingClientRect (includes transforms if any)
-    const rectWidth = rect.width || 0
-    const rectHeight = rect.height || 0
-    
-    // Get padding and border from computed styles
-    const paddingLeft = parseFloat(computedStyle.paddingLeft) || 0
-    const paddingRight = parseFloat(computedStyle.paddingRight) || 0
-    const paddingTop = parseFloat(computedStyle.paddingTop) || 0
-    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0
-    const borderLeft = parseFloat(computedStyle.borderLeftWidth) || 0
-    const borderRight = parseFloat(computedStyle.borderRightWidth) || 0
-    const borderTop = parseFloat(computedStyle.borderTopWidth) || 0
-    const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0
-    
-    // Calculate total dimensions including all spacing
-    const totalWidth = Math.max(
-      offsetWidth,
-      rectWidth,
-      offsetWidth + paddingLeft + paddingRight + borderLeft + borderRight,
-      150 // Minimum safe width
-    )
-    const totalHeight = Math.max(
-      offsetHeight,
-      rectHeight,
-      offsetHeight + paddingTop + paddingBottom + borderTop + borderBottom,
-      60 // Minimum safe height
-    )
-    
-    // Get safe positions (game-like pattern)
-    const safePositions = getSafePositions(totalWidth, totalHeight)
-    
-    if (safePositions.length === 0) {
-      // Fallback if no safe positions
-      return
-    }
-    
-    // Cycle through positions
-    const currentPosition = safePositions[positionIndexRef.current % safePositions.length]
-    
-    // Move to next position for next click
-    positionIndexRef.current = (positionIndexRef.current + 1) % safePositions.length
-    
-    // Final validation before setting position - triple check
-    let finalX = currentPosition.x
-    let finalY = currentPosition.y
-    
-    // Ensure within viewport with extra safety margin
-    const safetyMargin = 10
-    finalX = Math.max(safetyMargin, Math.min(window.innerWidth - totalWidth - safetyMargin, finalX))
-    finalY = Math.max(safetyMargin, Math.min(window.innerHeight - totalHeight - safetyMargin, finalY))
-    
-    // Verify button fits completely - one more check
-    if (finalX + totalWidth > window.innerWidth - safetyMargin) {
-      finalX = Math.max(safetyMargin, window.innerWidth - totalWidth - safetyMargin)
-    }
-    if (finalY + totalHeight > window.innerHeight - safetyMargin) {
-      finalY = Math.max(safetyMargin, window.innerHeight - totalHeight - safetyMargin)
-    }
-    if (finalX < safetyMargin) finalX = safetyMargin
-    if (finalY < safetyMargin) finalY = safetyMargin
-    
-    // Set position and corresponding message
-    setNoPosition({ x: finalX, y: finalY })
-    setNoMessageIndex(currentPosition.messageIndex)
+    // Set position and message
+    setNoPosition({ x: safePos.x, y: safePos.y })
+    setNoMessageIndex(safePos.messageIndex)
     
     // Mark as moved
     hasMovedRef.current = true
@@ -194,21 +117,37 @@ function App() {
 
   const handleNoLeave = () => {
     // Reset when user leaves so button can move again on next click attempt
-    // Only reset if button was actually moved
     if (hasMovedRef.current) {
       setTimeout(() => {
         hasMovedRef.current = false
-        lastMoveTimeRef.current = 0
       }, 300)
     }
   }
 
-  // Reset position index when user clicks Yes
+  // Handle window resize to ensure button stays within viewport
   useEffect(() => {
-    if (yesClicked) {
-      positionIndexRef.current = 0
+    const handleResize = () => {
+      // If button has moved, clamp its position to new viewport bounds
+      if (hasEverMoved) {
+        setNoPosition(prevPos => {
+          const viewport = getViewportDimensions()
+          const margin = 200
+          const buttonWidth = 250
+          const buttonHeight = 100
+          
+          // Simple clamp to safe bounds
+          const x = Math.max(margin, Math.min(viewport.width - buttonWidth - margin, prevPos.x))
+          const y = Math.max(margin, Math.min(viewport.height - buttonHeight - margin, prevPos.y))
+          
+          return { x, y }
+        })
+      }
     }
-  }, [yesClicked])
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [hasEverMoved])
+
 
   const handleGiftHover = (giftId: string) => {
     // Start rotation
@@ -243,7 +182,7 @@ function App() {
 
   if (yesClicked) {
     return (
-      <div className="app success-screen">
+      <div className="app success-screen" ref={appContainerRef}>
         <div className="hearts-container">
           {[...Array(20)].map((_, i) => (
             <div key={i} className="floating-heart" style={{
@@ -351,7 +290,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" ref={appContainerRef}>
       <div className="hearts-background">
         {[...Array(30)].map((_, i) => (
           <div 

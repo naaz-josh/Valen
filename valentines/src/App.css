@@ -1,5 +1,6 @@
 .app {
   min-height: 100vh;
+  width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -302,11 +303,7 @@
 
 .no-button-wrapper {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 120px;
-  min-height: 50px;
+  display: inline-block;
   box-sizing: border-box;
   margin: 0;
   padding: 0;
